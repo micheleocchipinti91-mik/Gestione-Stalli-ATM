@@ -732,6 +732,8 @@ td.r{color:#ff6b6b}td.g{color:var(--yel)}td.v{color:var(--grn)}td.gr{color:var(-
   <div style="font-size:20px;font-weight:800;margin-bottom:4px">🗺️ Tavole Grafiche</div>
   <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--mut);margin-bottom:12px">Seleziona una tavola per aprire il riepilogo dettagliato</div>
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap">
+    <button class="tbtn ta" onclick="pickPdfFolderOrFiles()" style="font-size:12px;padding:7px 16px">📁 Importa tutte le tavole (PDF)</button>
+    <input type="file" id="tgraf-multi-input" accept=".pdf" multiple style="display:none" onchange="_handleTgrafMultiFiles(this)">
     <span id="tgraf-folder-lbl" style="font-size:11px;color:var(--mut);font-family:'DM Mono',monospace"></span>
   </div>
   <!-- Area assegnazione PDF non abbinati -->
@@ -1804,6 +1806,46 @@ async function scanPdfFolder(){
     setSt('✅ '+(autoLoaded? autoLoaded+' PDF caricati automaticamente' : 'Tutti i PDF già abbinati'));
   }
 }
+// ── Importazione multipla PDF (un click): cartella vera su Chrome/Edge, multi-selezione su iPad/Safari ──
+function pickPdfFolderOrFiles(){
+  if(!_useIdbStorage&&window.showDirectoryPicker){scanPdfFolder();return;}
+  // iPad/Safari: nessuna vera selezione cartella — si selezionano più PDF insieme dall'app Files
+  document.getElementById('tgraf-multi-input').click();
+}
+async function _handleTgrafMultiFiles(input){
+  const files=Array.from(input.files||[]).filter(f=>f.name.toLowerCase().endsWith('.pdf'));
+  input.value='';
+  if(!files.length)return;
+  if(!DB.pdfs)DB.pdfs={};
+  _scannedPdfFiles={};
+  files.forEach(f=>{_scannedPdfFiles[f.name]=f;});
+  // Mappa nome file atteso (per convenzione tavola_X.pdf) → tavola
+  const tavole=[...new Set(DB.stalli.map(s=>s.tavola||'').filter(Boolean))];
+  const nomeToTav={};
+  tavole.forEach(t=>{nomeToTav[_tavNomePdf(t).toLowerCase()]=t;});
+  let matched=0;
+  const unmatched=[];
+  for(const f of files){
+    const tav=nomeToTav[f.name.toLowerCase()];
+    if(tav){
+      const data=await _readFileAsDataURL(f);
+      DB.pdfs[tav]={name:f.name,data,_mtime:Date.now()};
+      if(_useIdbStorage){try{await _idbPut('pdfTavole',f.name,{tav,name:f.name,data});}catch(e){}}
+      matched++;
+    } else {
+      unmatched.push(f.name);
+    }
+  }
+  buildTavoleGrafiche();
+  const lbl=document.getElementById('tgraf-folder-lbl');
+  if(lbl)lbl.textContent=files.length+' PDF selezionati';
+  if(unmatched.length){
+    _showUnmatchedPanel(unmatched);
+    setSt('✅ '+matched+' PDF abbinati automaticamente · '+unmatched.length+' da assegnare manualmente');
+  } else {
+    setSt('✅ '+matched+' PDF importati e abbinati alle tavole');
+  }
+}
 function _showUnmatchedPanel(filenames){
   if(!DB.pdfs)DB.pdfs={};
   const tavole=[...new Set(DB.stalli.map(s=>s.tavola||'').filter(Boolean))];
@@ -1827,10 +1869,12 @@ async function confirmPdfAssignments(){
     if(!tav||!fname)continue;
     const file=_scannedPdfFiles[fname];if(!file)continue;
     const data=await _readFileAsDataURL(file);
-    DB.pdfs[tav]={name:fname,data};
-    // Scrivi nella cartella se non c'è già
+    DB.pdfs[tav]={name:fname,data,_mtime:Date.now()};
+    // Scrivi nella cartella se non c'è già, altrimenti salva sul dispositivo (iPad/Safari)
     if(_pdfFolderHandle){
       try{const fh=await _pdfFolderHandle.getFileHandle(fname,{create:true});const w=await fh.createWritable();await w.write(file);await w.close();}catch(e){}
+    } else if(_useIdbStorage){
+      try{await _idbPut('pdfTavole',fname,{tav,name:fname,data});}catch(e){}
     }
     assigned++;
   }
