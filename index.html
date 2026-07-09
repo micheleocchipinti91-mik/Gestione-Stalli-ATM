@@ -486,6 +486,8 @@ td.r{color:#ff6b6b}td.g{color:var(--yel)}td.v{color:var(--grn)}td.gr{color:var(-
   <div id="dash-cards" class="dc"></div>
   <div id="dash-ch-ttl" style="display:none;font-size:12px;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--bd)">Distribuzione Stalli Blu per Tariffazione</div>
   <div id="dash-bars"></div>
+  <div id="dash-ch-ztl" style="display:none;font-size:12px;font-weight:700;color:#6366f1;text-transform:uppercase;letter-spacing:1.5px;margin-top:22px;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #6366f1">Distribuzione Residenti ZTL per Zona</div>
+  <div id="dash-bars-ztl"></div>
 </div>
 
 <!-- STALLI -->
@@ -1390,6 +1392,16 @@ function refreshDash(){
   const col={'ROSSA ANNUALE':'#ef4444','ROSSA STAGIONALE':'#f87171','GIALLA ANNUALE':'#f59e0b','GIALLA STAGIONALE':'#fbbf24','GRIGIA':'#9ca3af','VERDE':'#10b981'};
   document.getElementById('dash-ch-ttl').style.display=s.length?'':'none';
   document.getElementById('dash-bars').innerHTML=Object.entries(bT).sort((a,b)=>b[1]-a[1]).map(([k,val])=>`<div class="bar"><div class="bl" style="color:${col[k]||'#6b7280'}">${k}</div><div class="bt"><div class="bf" style="width:${totBlu?(val/totBlu*100).toFixed(1):0}%;background:${col[k]||'#6b7280'};opacity:.7"></div></div><div class="bn">${val}</div></div>`).join('');
+  const sZtl=s.filter(r=>(r.settore||'').trim().toUpperCase()==='ZTL');
+  const zoneOrder=['A','B','C','TORRE DI LIGNY'];
+  const zKey=z=>{const u=(z||'').trim().toUpperCase();if(u==='A'||u==='B'||u==='C')return u;if(u.indexOf('LIGNY')>=0||u.indexOf('TORRE')>=0)return 'TORRE DI LIGNY';return u||'N/D';};
+  const zCol={'A':'#6366f1','B':'#8b5cf6','C':'#a855f7','TORRE DI LIGNY':'#d946ef'};
+  const Zres={};zoneOrder.forEach(z=>{Zres[z]=0;});
+  sZtl.forEach(r=>{const zk=zKey(r.zona);if(!(zk in Zres))Zres[zk]=0;Zres[zk]+=r.stallo_residente||0;});
+  const totResZtl=Object.values(Zres).reduce((a,v)=>a+v,0);
+  document.getElementById('dash-ch-ztl').style.display=sZtl.length?'':'none';
+  const zoneKeys=zoneOrder.concat(Object.keys(Zres).filter(k=>zoneOrder.indexOf(k)<0));
+  document.getElementById('dash-bars-ztl').innerHTML=zoneKeys.filter(z=>Zres[z]>0).map(z=>`<div class="bar"><div class="bl" style="color:${zCol[z]||'#6366f1'}">${z}</div><div class="bt"><div class="bf" style="width:${totResZtl?(Zres[z]/totResZtl*100).toFixed(1):0}%;background:${zCol[z]||'#6366f1'};opacity:.7"></div></div><div class="bn">${Zres[z]}</div></div>`).join('');
 }
 
 // ── RIEPILOGHI ────────────────────────────────────────────────────
